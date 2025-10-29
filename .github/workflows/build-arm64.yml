@@ -12,29 +12,49 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Install cross-compiler and necessary headers/libs
+      - name: Install cross-compiler and necessary headers
         run: |
-          # 1. Thêm kiến trúc arm64
+          # 1. Thiết lập kiến trúc và cập nhật APT
           sudo dpkg --add-architecture arm64
-          
-          # 2. Cập nhật package list và bỏ qua lỗi 404 index file 
           sudo apt-get update -o Acquire::Retries=3 || true 
           
-          # 3. Cài đặt GCC/G++ chéo VÀ các Header (cho compilation) VÀ các Libs ARM64 (hy vọng cho linking)
+          # 2. Cài đặt GCC/G++ chéo, Header files (amd64) và các công cụ liên quan
           sudo apt-get install -y --no-install-recommends \
             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
             libwayland-dev libegl1-mesa-dev libgles2-mesa-dev \
-            # Cố gắng cài đặt các gói runtime arm64 phổ biến nhất:
-            libwayland-client0:arm64 libegl-mesa0:arm64 libgles-mesa2:arm64 \
-            # Cài đặt libc và libstdc++ (dependency của mọi chương trình)
-            libc6:arm64 libstdc++6:arm64 
-            
+            libc6:arm64 libstdc++6:arm64 ar 
+
+      - name: Create ARM64 Dummy Libraries (Workaround for Linker) 
+        id: create_dummy_libs
+        run: |
+          # Tạo thư mục cho thư viện giả
+          DUMMY_DIR=./arm64_linker_libs
+          mkdir -p ${DUMMY_DIR}
+          
+          # Tạo thư viện giả rỗng (.so) cho ARM64
+          echo 'Creating dummy libraries: libwayland-client.so, libEGL.so, libGLESv2.so'
+          
+          # Hàm tạo file .so rỗng cho linker
+          create_dummy_lib() {
+              local lib_name=$1
+              aarch64-linux-gnu-ar qcs ${DUMMY_DIR}/lib${lib_name}.a
+              aarch64-linux-gnu-g++ -shared -o ${DUMMY_DIR}/lib${lib_name}.so ${DUMMY_DIR}/lib${lib_name}.a
+          }
+
+          create_dummy_lib wayland-client
+          create_dummy_lib EGL
+          create_dummy_lib GLESv2
+          
+          # Đặt biến môi trường cho bước build tiếp theo
+          echo "DUMMY_DIR=${DUMMY_DIR}" >> $GITHUB_ENV
+
       - name: Build ARM64 binary
         run: |
-          # Lệnh biên dịch sử dụng các cờ liên kết.
+          # Dùng cờ -L để chỉ định thư mục chứa thư viện giả cho trình liên kết chéo
           aarch64-linux-gnu-g++ -std=c++17 \
             -I./engine_arm64 \
             -L./engine_arm64 \
+            -L${{ env.DUMMY_DIR }} \
             -o ivi_home_screen \
             main.cpp \
             -lflutter_engine \
@@ -50,3 +70,4 @@ jobs:
           name: ivi_home_screen_arm64
           path: |
             ivi_home_screen
+            engine_arm64/libflutter_engine.so
