@@ -21,7 +21,7 @@ jobs:
             libwayland-dev libegl1-mesa-dev libgles2-mesa-dev \
             wget dpkg-dev binutils
 
-      - name: Manually Install Core ARM64 Runtime Libraries (Dynamic URL Search - Add SUDO FIX) 👈 FIX QUYỀN TRUY CẬP
+      - name: Manually Install Core ARM64 Runtime Libraries (Dynamic URL Search - Add SUDO FIX)
         run: |
           # Thiết lập thư mục cho thư viện chéo
           CORE_LIB_DIR=/usr/aarch64-linux-gnu/lib
@@ -69,6 +69,25 @@ jobs:
           # THÊM SUDO: Cần quyền root để sao chép vào thư mục hệ thống
           sudo cp /tmp/libstdc_extract/usr/lib/aarch64-linux-gnu/libstdc++.so.6 ${CORE_LIB_DIR}/
           
+          # --- 3. Tải và trích xuất libfontconfig1 (Font Rendering Dependency) 👈 NEW BLOCK
+          echo "Searching for the latest libfontconfig1:arm64 version..."
+          
+          # Tìm kiếm file .deb
+          FONTCONFIG_FILENAME=$(wget -O - http://ports.ubuntu.com/ubuntu-ports/pool/main/f/fontconfig/ 2>/dev/null | grep 'libfontconfig1_.*_arm64.deb' | tail -n 1 | grep -o 'href="[^"]*"' | head -1 | cut -d\" -f2)
+          FONTCONFIG_URL="http://ports.ubuntu.com/ubuntu-ports/pool/main/f/fontconfig/${FONTCONFIG_FILENAME}"
+
+          echo "Found libfontconfig1:arm64 at URL: ${FONTCONFIG_URL}. Starting download..."
+          wget "${FONTCONFIG_URL}" -O libfontconfig1.deb
+
+          if [ ! -f libfontconfig1.deb ]; then
+             echo "ERROR: Failed to download libfontconfig1 ARM64 version. Filename extracted: ${FONTCONFIG_FILENAME}"
+             exit 1
+          fi
+
+          dpkg-deb -x libfontconfig1.deb /tmp/fontconfig_extract
+          # Fontconfig library là libfontconfig.so.1
+          sudo cp /tmp/fontconfig_extract/usr/lib/aarch64-linux-gnu/libfontconfig.so.1 ${CORE_LIB_DIR}/
+
           # Đặt biến môi trường cho bước build
           echo "CROSS_LIB_PATH=${CORE_LIB_DIR}" >> $GITHUB_ENV
           
@@ -105,6 +124,7 @@ jobs:
             -lwayland-client \
             -lEGL \
             -lGLESv2 \
+            -lfontconfig \
             -lpthread \
             -ldl
           
