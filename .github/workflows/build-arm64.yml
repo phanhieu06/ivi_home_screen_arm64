@@ -12,25 +12,25 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Install cross-compiler (Minimal)
+      - name: Install cross-compiler and necessary headers
         run: |
-          # Bước 1: Thêm kiến trúc arm64
+          # 1. Thêm kiến trúc arm64
           sudo dpkg --add-architecture arm64
           
-          # Bước 2: Cập nhật package list và bỏ qua lỗi 404 index file
-          # Giữ || true để đảm bảo bước này không làm lỗi workflow
+          # 2. Cập nhật package list và bỏ qua lỗi 404 index file 
           sudo apt-get update -o Acquire::Retries=3 || true 
           
-          # Bước 3: CHỈ CÀI ĐẶT GCC/G++ cross-compiler. 
-          # BỎ QUA HOÀN TOÀN CÁC GÓI THƯ VIỆN HỆ THỐNG (WAYLAND/EGL/GLESV2).
+          # 3. Cài đặt C/C++ cross-compiler và Header files cho kiến trúc mặc định (amd64).
+          # Header files (.h) là độc lập với kiến trúc, cần thiết cho bước biên dịch.
           sudo apt-get install -y --no-install-recommends \
-            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+            libwayland-dev libegl1-mesa-dev libgles2-mesa-dev
 
       - name: Build ARM64 binary
         run: |
-          # Các cờ liên kết (-l...) vẫn giữ nguyên.
-          # Trình biên dịch sẽ ghi nhận việc liên kết động và để việc tìm kiếm thư viện
-          # cho hệ thống Lemans IVI khi app chạy.
+          # Compiler (aarch64-linux-gnu-g++) sẽ sử dụng các header vừa cài (libwayland-dev).
+          # Linker (-lwayland-client -lEGL -lGLESv2) sẽ giả định các thư viện này
+          # tồn tại trên thiết bị mục tiêu Lemans IVI.
           aarch64-linux-gnu-g++ -std=c++17 \
             -I./engine_arm64 \
             -L./engine_arm64 \
