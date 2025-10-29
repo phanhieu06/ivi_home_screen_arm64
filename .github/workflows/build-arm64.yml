@@ -21,11 +21,12 @@ jobs:
             libwayland-dev libegl1-mesa-dev libgles2-mesa-dev \
             wget dpkg-dev binutils
 
-      - name: Manually Install Core ARM64 Runtime Libraries (Dynamic URL Search - Final Path Fix) 👈 FIX
+      - name: Manually Install Core ARM64 Runtime Libraries (Dynamic URL Search - Add SUDO FIX) 👈 FIX QUYỀN TRUY CẬP
         run: |
           # Thiết lập thư mục cho thư viện chéo
           CORE_LIB_DIR=/usr/aarch64-linux-gnu/lib
-          mkdir -p ${CORE_LIB_DIR}
+          # Cần quyền root để tạo thư mục hệ thống
+          sudo mkdir -p ${CORE_LIB_DIR}
           
           # --- 1. Tải và trích xuất libc6 (glibc) sử dụng tìm kiếm động ---
           echo "Searching for the latest libc6:arm64 version..."
@@ -44,9 +45,9 @@ jobs:
           fi
           
           dpkg-deb -x libc6.deb /tmp/glibc_extract
-          # ĐÃ SỬA: Thay thế /lib bằng /usr/lib để phù hợp với cấu trúc gói Ubuntu hiện đại
-          cp /tmp/glibc_extract/usr/lib/aarch64-linux-gnu/libc.so.6 ${CORE_LIB_DIR}/
-          cp /tmp/glibc_extract/usr/lib/aarch64-linux-gnu/libm.so.6 ${CORE_LIB_DIR}/
+          # THÊM SUDO: Cần quyền root để sao chép vào thư mục hệ thống
+          sudo cp /tmp/glibc_extract/usr/lib/aarch64-linux-gnu/libc.so.6 ${CORE_LIB_DIR}/
+          sudo cp /tmp/glibc_extract/usr/lib/aarch64-linux-gnu/libm.so.6 ${CORE_LIB_DIR}/
           
           # --- 2. Tải và trích xuất libstdc++6 sử dụng tìm kiếm động ---
           echo "Searching for the latest libstdc++6:arm64 version..."
@@ -65,7 +66,8 @@ jobs:
           fi
 
           dpkg-deb -x libstdc++.deb /tmp/libstdc_extract
-          cp /tmp/libstdc_extract/usr/lib/aarch64-linux-gnu/libstdc++.so.6 ${CORE_LIB_DIR}/
+          # THÊM SUDO: Cần quyền root để sao chép vào thư mục hệ thống
+          sudo cp /tmp/libstdc_extract/usr/lib/aarch64-linux-gnu/libstdc++.so.6 ${CORE_LIB_DIR}/
           
           # Đặt biến môi trường cho bước build
           echo "CROSS_LIB_PATH=${CORE_LIB_DIR}" >> $GITHUB_ENV
