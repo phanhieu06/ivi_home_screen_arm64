@@ -1,237 +1,138 @@
-name: Build ARM64 Binary
+# Thiết lập thư mục cho thư viện chéo
+CORE_LIB_DIR=/usr/aarch64-linux-gnu/lib
 
-on:
-  workflow_dispatch:
-  push:
-    branches: [ main ]
+# Cần quyền root để tạo thư mục hệ thống
+# Lưu ý: Lệnh này có thể không cần thiết nếu thư mục đã tồn tại trong môi trường GitHub Actions, 
+# nhưng việc có nó sẽ đảm bảo script hoạt động.
+sudo mkdir -p ${CORE_LIB_DIR}
 
-jobs:
-  build-arm64:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
+# Hàm tìm kiếm và tải xuống thư viện
+# Tham số 1: Tên thư viện cần tìm (ví dụ: 'libc6_.*_arm64.deb')
+# Tham số 2: URL thư mục cơ sở (ví dụ: 'http://ports.ubuntu.com/ubuntu-ports/pool/main/g/glibc/')
+# Tham số 3: Tên file đầu ra (ví dụ: 'libc6.deb')
+# Tham số 4: Đường dẫn thư viện thực tế bên trong gói DEB (ví dụ: '/usr/lib/aarch64-linux-gnu/libc.so.6')
+# Tham số 5 (Tùy chọn): Tên symlink (ví dụ: 'libc.so')
+download_and_extract() {
+    local SEARCH_PATTERN=$1
+    local BASE_URL=$2
+    local OUTPUT_FILENAME=$3
+    local LIB_PATH_IN_DEB=$4
+    local SYMLINK_NAME=$5
+    
+    echo "Searching for the latest ${SEARCH_PATTERN} version..."
 
-      - name: Install cross-compiler, tools, and headers (AMD64)
-        run: |
-          # 1. Cài đặt các công cụ chéo và headers AMD64 (APT chỉ dùng cho x86_64/AMD64)
-          sudo apt-get update -o Acquire::Retries=3 || true 
-          sudo apt-get install -y --no-install-recommends \
-            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
-            libwayland-dev libegl1-mesa-dev libgles2-mesa-dev \
-            wget dpkg-dev binutils
+    # CÁCH FIX MỚI: Sử dụng grep -o để trực tiếp tìm kiếm thuộc tính href chứa tên file,
+    # sau đó dùng cut để trích xuất tên file chính xác.
+    FILENAME=$(wget -O - ${BASE_URL} 2>/dev/null | grep -o 'href="'${SEARCH_PATTERN}'"' | tail -n 1 | cut -d\" -f2)
+    
+    # Kiểm tra nếu không tìm thấy tên file (lỗi của bạn xảy ra ở đây)
+    if [ -z "${FILENAME}" ]; then
+       echo "ERROR: Failed to find filename matching pattern: ${SEARCH_PATTERN} from ${BASE_URL}"
+       exit 1
+    fi
+    
+    URL="${BASE_URL}${FILENAME}"
+    echo "Found at URL: ${URL}. Starting download..."
+    wget "${URL}" -O ${OUTPUT_FILENAME}
+    
+    if [ ! -f ${OUTPUT_FILENAME} ]; then
+       echo "ERROR: Failed to download ${OUTPUT_FILENAME}."
+       exit 1
+    fi
+    
+    EXTRACT_DIR="/tmp/${OUTPUT_FILENAME}_extract"
+    dpkg-deb -x ${OUTPUT_FILENAME} ${EXTRACT_DIR}
+    
+    # Sao chép thư viện
+    LIB_ACTUAL_PATH="${LIB_PATH_IN_DEB}"
+    LIB_ACTUAL_NAME=$(basename "${LIB_ACTUAL_PATH}")
+    
+    # THÊM SUDO: Cần quyền root để sao chép vào thư mục hệ thống
+    sudo cp ${EXTRACT_DIR}${LIB_ACTUAL_PATH} ${CORE_LIB_DIR}/
 
-      - name: Manually Install Core ARM64 Runtime Libraries (Dynamic URL Search - Add SUDO FIX)
-        run: |
-          # Thiết lập thư mục cho thư viện chéo
-          CORE_LIB_DIR=/usr/aarch64-linux-gnu/lib
-          # Cần quyền root để tạo thư mục hệ thống
-          sudo mkdir -p ${CORE_LIB_DIR}
-          
-          # --- 1. Tải và trích xuất libc6 (glibc) sử dụng tìm kiếm động ---
-          echo "Searching for the latest libc6:arm64 version..."
-          
-          # FIX: Sử dụng chuỗi lệnh grep/cut để trích xuất TÊN FILE CHÍNH XÁC từ thuộc tính href, loại bỏ HTML thừa.
-          GLIBC_FILENAME=$(wget -O - http://ports.ubuntu.com/ubuntu-ports/pool/main/g/glibc/ 2>/dev/null | grep 'libc6_.*_arm64.deb' | tail -n 1 | grep -o 'href="[^"]*"' | head -1 | cut -d\" -f2)
-          GLIBC_URL="http://ports.ubuntu.com/ubuntu-ports/pool/main/g/glibc/${GLIBC_FILENAME}"
-          
-          echo "Found libc6:arm64 at URL: ${GLIBC_URL}. Starting download..."
-          wget "${GLIBC_URL}" -O libc6.deb
-          
-          # KIỂM TRA LỖI: Nếu tải xuống thất bại, dừng lại ngay
-          if [ ! -f libc6.deb ]; then
-             echo "ERROR: Failed to download libc6 ARM64 version. Filename extracted: ${GLIBC_FILENAME}"
-             exit 1
-          fi
-          
-          dpkg-deb -x libc6.deb /tmp/glibc_extract
-          # THÊM SUDO: Cần quyền root để sao chép vào thư mục hệ thống
-          sudo cp /tmp/glibc_extract/usr/lib/aarch64-linux-gnu/libc.so.6 ${CORE_LIB_DIR}/
-          sudo cp /tmp/glibc_extract/usr/lib/aarch64-linux-gnu/libm.so.6 ${CORE_LIB_DIR}/
-          
-          # --- 2. Tải và trích xuất libstdc++6 sử dụng tìm kiếm động ---
-          echo "Searching for the latest libstdc++6:arm64 version..."
-          
-          # FIX: Sử dụng chuỗi lệnh grep/cut để trích xuất TÊN FILE CHÍNH XÁC từ thuộc tính href.
-          LIBSTDC_FILENAME=$(wget -O - http://ports.ubuntu.com/ubuntu-ports/pool/main/g/gcc-12/ 2>/dev/null | grep 'libstdc++6_.*_arm64.deb' | tail -n 1 | grep -o 'href="[^"]*"' | head -1 | cut -d\" -f2)
-          LIBSTDC_URL="http://ports.ubuntu.com/ubuntu-ports/pool/main/g/gcc-12/${LIBSTDC_FILENAME}"
+    # Tạo symlink nếu được cung cấp
+    if [ ! -z "${SYMLINK_NAME}" ]; then
+      sudo ln -s ${LIB_ACTUAL_NAME} ${CORE_LIB_DIR}/${SYMLINK_NAME}
+    fi
+    echo "Successfully installed ${LIB_ACTUAL_NAME}."
+}
 
-          echo "Found libstdc++6:arm64 at URL: ${LIBSTDC_URL}. Starting download..."
-          wget "${LIBSTDC_URL}" -O libstdc++.deb
+# --- 1. Tải và trích xuất libc6 (glibc) ---
+download_and_extract \
+  'libc6_.*_arm64.deb' \
+  'http://ports.ubuntu.com/ubuntu-ports/pool/main/g/glibc/' \
+  'libc6.deb' \
+  '/usr/lib/aarch64-linux-gnu/libc.so.6' \
+  'libc.so'
 
-          # KIỂM TRA LỖI: Nếu tải xuống thất bại, dừng lại ngay
-          if [ ! -f libstdc++.deb ]; then
-             echo "ERROR: Failed to download libstdc++6 ARM64 version. Filename extracted: ${LIBSTDC_FILENAME}"
-             exit 1
-          fi
+# libm.so.6 cần được cài đặt riêng vì nó được bao gồm trong libc6.deb
+sudo cp /tmp/libc6.deb_extract/usr/lib/aarch64-linux-gnu/libm.so.6 ${CORE_LIB_DIR}/
+sudo ln -s libm.so.6 ${CORE_LIB_DIR}/libm.so
+echo "Successfully installed libm.so.6."
 
-          dpkg-deb -x libstdc++.deb /tmp/libstdc_extract
-          # THÊM SUDO: Cần quyền root để sao chép vào thư mục hệ thống
-          sudo cp /tmp/libstdc_extract/usr/lib/aarch64-linux-gnu/libstdc++.so.6 ${CORE_LIB_DIR}/
-          
-          # --- 3. Tải và trích xuất libfontconfig1
-          echo "Searching for the latest libfontconfig1:arm64 version..."
-          
-          # Tìm kiếm file .deb
-          FONTCONFIG_FILENAME=$(wget -O - http://ports.ubuntu.com/ubuntu-ports/pool/main/f/fontconfig/ 2>/dev/null | grep 'libfontconfig1_.*_arm64.deb' | tail -n 1 | grep -o 'href="[^"]*"' | head -1 | cut -d\" -f2)
-          FONTCONFIG_URL="http://ports.ubuntu.com/ubuntu-ports/pool/main/f/fontconfig/${FONTCONFIG_FILENAME}"
+# --- 2. Tải và trích xuất libstdc++6 ---
+download_and_extract \
+  'libstdc++6_.*_arm64.deb' \
+  'http://ports.ubuntu.com/ubuntu-ports/pool/main/g/gcc-12/' \
+  'libstdc++.deb' \
+  '/usr/lib/aarch64-linux-gnu/libstdc++.so.6' \
+  'libstdc++.so'
 
-          echo "Found libfontconfig1:arm64 at URL: ${FONTCONFIG_URL}. Starting download..."
-          wget "${FONTCONFIG_URL}" -O libfontconfig1.deb
+# --- 3. Tải và trích xuất libfontconfig1 ---
+download_and_extract \
+  'libfontconfig1_.*_arm64.deb' \
+  'http://ports.ubuntu.com/ubuntu-ports/pool/main/f/fontconfig/' \
+  'libfontconfig1.deb' \
+  '/usr/lib/aarch64-linux-gnu/libfontconfig.so.1' \
+  'libfontconfig.so'
 
-          if [ ! -f libfontconfig1.deb ]; then
-             echo "ERROR: Failed to download libfontconfig1 ARM64 version. Filename extracted: ${FONTCONFIG_FILENAME}"
-             exit 1
-          fi
+# --- 4. Tải và trích xuất libfreetype6 (FreeType) ---
+download_and_extract \
+  'libfreetype6_.*_arm64.deb' \
+  'http://ports.ubuntu.com/ubuntu-ports/pool/main/f/freetype/' \
+  'libfreetype6.deb' \
+  '/usr/lib/aarch64-linux-gnu/libfreetype.so.6' \
+  'libfreetype.so'
 
-          dpkg-deb -x libfontconfig1.deb /tmp/fontconfig_extract
-          # Fontconfig library là libfontconfig.so.1
-          sudo cp /tmp/fontconfig_extract/usr/lib/aarch64-linux-gnu/libfontconfig.so.1 ${CORE_LIB_DIR}/
-          # TẠO SYMLINK: Tạo libfontconfig.so
-          sudo ln -s libfontconfig.so.1 ${CORE_LIB_DIR}/libfontconfig.so
-          
-          # --- 4. Tải và trích xuất libfreetype6 (FreeType)
-          echo "Searching for the latest libfreetype6:arm64 version..."
-          
-          # Tìm kiếm file .deb
-          FREETYPE_FILENAME=$(wget -O - http://ports.ubuntu.com/ubuntu-ports/pool/main/f/freetype/ 2>/dev/null | grep 'libfreetype6_.*_arm64.deb' | tail -n 1 | grep -o 'href="[^"]*"' | head -1 | cut -d\" -f2)
-          FREETYPE_URL="http://ports.ubuntu.com/ubuntu-ports/pool/main/f/freetype/${FREETYPE_FILENAME}"
+# --- 5. Tải và trích xuất libexpat1 (XML Parser) ---
+download_and_extract \
+  'libexpat1_.*_arm64.deb' \
+  'http://ports.ubuntu.com/ubuntu-ports/pool/main/e/expat/' \
+  'libexpat1.deb' \
+  '/usr/lib/aarch64-linux-gnu/libexpat.so.1' \
+  'libexpat.so'
 
-          echo "Found libfreetype6:arm64 at URL: ${FREETYPE_URL}. Starting download..."
-          wget "${FREETYPE_URL}" -O libfreetype6.deb
+# --- 6. Tải và trích xuất zlib (libz.so.1) ---
+download_and_extract \
+  'zlib1g_.*_arm64.deb' \
+  'http://ports.ubuntu.com/ubuntu-ports/pool/main/z/zlib/' \
+  'zlib1g.deb' \
+  '/usr/lib/aarch64-linux-gnu/libz.so.1' \
+  'libz.so'
 
-          if [ ! -f libfreetype6.deb ]; then
-             echo "ERROR: Failed to download libfreetype6 ARM64 version. Filename extracted: ${FREETYPE_FILENAME}"
-             exit 1
-          fi
+# --- 7. Tải và trích xuất libbz2 (libbz2.so.1.0) ---
+download_and_extract \
+  'libbz2-1.0_.*_arm64.deb' \
+  'http://ports.ubuntu.com/ubuntu-ports/pool/main/b/bzip2/' \
+  'libbz2.deb' \
+  '/usr/lib/aarch64-linux-gnu/libbz2.so.1.0' \
+  'libbz2.so'
 
-          dpkg-deb -x libfreetype6.deb /tmp/freetype_extract
-          # Thư viện thực tế là libfreetype.so.6
-          sudo cp /tmp/freetype_extract/usr/lib/aarch64-linux-gnu/libfreetype.so.6 ${CORE_LIB_DIR}/
-          # TẠO SYMLINK: Tạo libfreetype.so
-          sudo ln -s libfreetype.so.6 ${CORE_LIB_DIR}/libfreetype.so
+# --- 8. Tải và trích xuất libpng16 (libpng16.so.16) 👈 SỬA LỖI Ở ĐÂY
+download_and_extract \
+  'libpng16-16_.*_arm64.deb' \
+  'http://ports.ubuntu.com/ubuntu-ports/pool/main/libp/libpng/' \
+  'libpng.deb' \
+  '/usr/lib/aarch64-linux-gnu/libpng16.so.16' \
+  'libpng.so'
 
-          # --- 5. Tải và trích xuất libexpat1 (XML Parser)
-          echo "Searching for the latest libexpat1:arm64 version..."
-          
-          # Tìm kiếm file .deb
-          EXPAT_FILENAME=$(wget -O - http://ports.ubuntu.com/ubuntu-ports/pool/main/e/expat/ 2>/dev/null | grep 'libexpat1_.*_arm64.deb' | tail -n 1 | grep -o 'href="[^"]*"' | head -1 | cut -d\" -f2)
-          EXPAT_URL="http://ports.ubuntu.com/ubuntu-ports/pool/main/e/expat/${EXPAT_FILENAME}"
-
-          echo "Found libexpat1:arm64 at URL: ${EXPAT_URL}. Starting download..."
-          wget "${EXPAT_URL}" -O libexpat1.deb
-
-          if [ ! -f libexpat1.deb ]; then
-             echo "ERROR: Failed to download libexpat1 ARM64 version. Filename extracted: ${EXPAT_FILENAME}"
-             exit 1
-          fi
-
-          dpkg-deb -x libexpat1.deb /tmp/expat_extract
-          # Thư viện thực tế là libexpat.so.1
-          sudo cp /tmp/expat_extract/usr/lib/aarch64-linux-gnu/libexpat.so.1 ${CORE_LIB_DIR}/
-          # TẠO SYMLINK: Tạo libexpat.so
-          sudo ln -s libexpat.so.1 ${CORE_LIB_DIR}/libexpat.so
-          
-          # --- 6. Tải và trích xuất zlib (libz.so.1) 👈 THƯ VIỆN MỚI
-          echo "Searching for the latest zlib1g:arm64 version..."
-          ZLIB_FILENAME=$(wget -O - http://ports.ubuntu.com/ubuntu-ports/pool/main/z/zlib/ 2>/dev/null | grep 'zlib1g_.*_arm64.deb' | tail -n 1 | grep -o 'href="[^"]*"' | head -1 | cut -d\" -f2)
-          ZLIB_URL="http://ports.ubuntu.com/ubuntu-ports/pool/main/z/zlib/${ZLIB_FILENAME}"
-          echo "Found zlib1g:arm64 at URL: ${ZLIB_URL}. Starting download..."
-          wget "${ZLIB_URL}" -O zlib1g.deb
-          if [ ! -f zlib1g.deb ]; then echo "ERROR: Failed to download zlib1g ARM64 version."; exit 1; fi
-          dpkg-deb -x zlib1g.deb /tmp/zlib_extract
-          sudo cp /tmp/zlib_extract/usr/lib/aarch64-linux-gnu/libz.so.1 ${CORE_LIB_DIR}/
-          sudo ln -s libz.so.1 ${CORE_LIB_DIR}/libz.so
-          
-          # --- 7. Tải và trích xuất libbz2 (libbz2.so.1.0) 👈 THƯ VIỆN MỚI
-          echo "Searching for the latest libbz2-1.0:arm64 version..."
-          BZ2_FILENAME=$(wget -O - http://ports.ubuntu.com/ubuntu-ports/pool/main/b/bzip2/ 2>/dev/null | grep 'libbz2-1.0_.*_arm64.deb' | tail -n 1 | grep -o 'href="[^"]*"' | head -1 | cut -d\" -f2)
-          BZ2_URL="http://ports.ubuntu.com/ubuntu-ports/pool/main/b/bzip2/${BZ2_FILENAME}"
-          echo "Found libbz2-1.0:arm64 at URL: ${BZ2_URL}. Starting download..."
-          wget "${BZ2_URL}" -O libbz2.deb
-          if [ ! -f libbz2.deb ]; then echo "ERROR: Failed to download libbz2-1.0 ARM64 version."; exit 1; fi
-          dpkg-deb -x libbz2.deb /tmp/bz2_extract
-          # Thư viện thực tế là libbz2.so.1.0
-          sudo cp /tmp/bz2_extract/usr/lib/aarch64-linux-gnu/libbz2.so.1.0 ${CORE_LIB_DIR}/
-          sudo ln -s libbz2.so.1.0 ${CORE_LIB_DIR}/libbz2.so
-          
-          # --- 8. Tải và trích xuất libpng16 (libpng16.so.16) 👈 THƯ VIỆN MỚI
-          echo "Searching for the latest libpng16-16:arm64 version..."
-          PNG_FILENAME=$(wget -O - http://ports.ubuntu.com/ubuntu-ports/pool/main/libp/libpng/ 2>/dev/null | grep 'libpng16-16_.*_arm64.deb' | tail -n 1 | grep -o 'href="[^"]*"' | head -1 | cut -d\" -f2)
-          PNG_URL="http://ports.ubuntu.com/ubuntu-ports/pool/main/libp/libpng/${PNG_FILENAME}"
-          echo "Found libpng16-16:arm64 at URL: ${PNG_URL}. Starting download..."
-          wget "${PNG_URL}" -O libpng.deb
-          if [ ! -f libpng.deb ]; then echo "ERROR: Failed to download libpng16-16 ARM64 version."; exit 1; fi
-          dpkg-deb -x libpng.deb /tmp/png_extract
-          # Thư viện thực tế là libpng16.so.16
-          sudo cp /tmp/png_extract/usr/lib/aarch64-linux-gnu/libpng16.so.16 ${CORE_LIB_DIR}/
-          sudo ln -s libpng16.so.16 ${CORE_LIB_DIR}/libpng16.so
-          
-          # --- 9. Tải và trích xuất libbrotlidec1 (libbrotlidec.so.1) 👈 THƯ VIỆN MỚI
-          echo "Searching for the latest libbrotlidec1:arm64 version..."
-          BROTLI_FILENAME=$(wget -O - http://ports.ubuntu.com/ubuntu-ports/pool/main/b/brotli/ 2>/dev/null | grep 'libbrotlidec1_.*_arm64.deb' | tail -n 1 | grep -o 'href="[^"]*"' | head -1 | cut -d\" -f2)
-          BROTLI_URL="http://ports.ubuntu.com/ubuntu-ports/pool/main/b/brotli/${BROTLI_FILENAME}"
-          echo "Found libbrotlidec1:arm64 at URL: ${BROTLI_URL}. Starting download..."
-          wget "${BROTLI_URL}" -O libbrotli.deb
-          if [ ! -f libbrotli.deb ]; then echo "ERROR: Failed to download libbrotlidec1 ARM64 version."; exit 1; fi
-          dpkg-deb -x libbrotli.deb /tmp/brotli_extract
-          # Thư viện thực tế là libbrotlidec.so.1
-          sudo cp /tmp/brotli_extract/usr/lib/aarch64-linux-gnu/libbrotlidec.so.1 ${CORE_LIB_DIR}/
-          sudo ln -s libbrotlidec.so.1 ${CORE_LIB_DIR}/libbrotlidec.so
-
-
-          # Đặt biến môi trường cho bước build
-          echo "CROSS_LIB_PATH=${CORE_LIB_DIR}" >> $GITHUB_ENV
-          
-      - name: Create ARM64 Dummy Libraries (for Wayland/EGL/GLESv2)
-        id: create_dummy_libs
-        run: |
-          DUMMY_DIR=./arm64_dummy_libs
-          mkdir -p ${DUMMY_DIR}
-          
-          echo 'Creating dummy libraries: libwayland-client.so, libEGL.so, libGLESv2.so'
-          
-          create_dummy_lib() {
-              local lib_name=$1
-              aarch64-linux-gnu-ar qcs ${DUMMY_DIR}/lib${lib_name}.a
-              aarch64-linux-gnu-g++ -shared -o ${DUMMY_DIR}/lib${lib_name}.so ${DUMMY_DIR}/lib${lib_name}.a
-          }
-
-          create_dummy_lib wayland-client
-          create_dummy_lib EGL
-          create_dummy_lib GLESv2
-          
-          echo "DUMMY_DIR=${DUMMY_DIR}" >> $GITHUB_ENV
-
-      - name: Build ARM64 binary
-        run: |
-          # Thêm cờ linker đặc biệt để bỏ qua các lỗi GLIBC nội bộ
-          aarch64-linux-gnu-g++ -std=c++17 \
-            -Wl,--unresolved-symbols=ignore-in-shared-libs \
-            -I./engine_arm64 \
-            -L./engine_arm64 \
-            -L${{ env.CROSS_LIB_PATH }} \
-            -L${{ env.DUMMY_DIR }} \
-            -o ivi_home_screen \
-            main.cpp \
-            -lflutter_engine \
-            -lwayland-client \
-            -lEGL \
-            -lGLESv2 \
-            -lfontconfig \
-            -lfreetype \
-            -lexpat \
-            -lz \
-            -lbz2 \
-            -lpng16 \
-            -lbrotlidec \
-            -lpthread \
-            -ldl
-          
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ivi_home_screen_arm64
-          path: |
-            ivi_home_screen
-            engine_arm64/libflutter_engine.so
+# --- 9. Tải và trích xuất libbrotlidec1 (libbrotlidec.so.1) ---
+download_and_extract \
+  'libbrotlidec1_.*_arm64.deb' \
+  'http://ports.ubuntu.com/ubuntu-ports/pool/main/b/brotli/' \
+  'libbrotli.deb' \
+  '/usr/lib/aarch64-linux-gnu/libbrotlidec.so.1' \
+  'libbrotlidec.so'
+  
+# Đặt biến môi trường cho bước build
+echo "CROSS_LIB_PATH=${CORE_LIB_DIR}" >> $GITHUB_ENV
