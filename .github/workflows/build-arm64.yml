@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions:checkout@v4
 
       - name: Install cross-compiler, tools, and headers (AMD64)
         run: |
@@ -21,7 +21,7 @@ jobs:
             libwayland-dev libegl1-mesa-dev libgles2-mesa-dev \
             wget dpkg-dev binutils
 
-      - name: Manually Install Core ARM64 Runtime Libraries (Dynamic URL Search - Reworked) 👈 Fix Robustness
+      - name: Manually Install Core ARM64 Runtime Libraries (Dynamic URL Search - Final Path Fix) 👈 FIX
         run: |
           # Thiết lập thư mục cho thư viện chéo
           CORE_LIB_DIR=/usr/aarch64-linux-gnu/lib
@@ -31,7 +31,6 @@ jobs:
           echo "Searching for the latest libc6:arm64 version..."
           
           # FIX: Sử dụng chuỗi lệnh grep/cut để trích xuất TÊN FILE CHÍNH XÁC từ thuộc tính href, loại bỏ HTML thừa.
-          # 1. wget index. 2. grep dòng chứa tên file. 3. tail lấy dòng mới nhất. 4. grep -o lấy phần href="...". 5. cut lấy giá trị giữa hai dấu nháy kép.
           GLIBC_FILENAME=$(wget -O - http://ports.ubuntu.com/ubuntu-ports/pool/main/g/glibc/ 2>/dev/null | grep 'libc6_.*_arm64.deb' | tail -n 1 | grep -o 'href="[^"]*"' | head -1 | cut -d\" -f2)
           GLIBC_URL="http://ports.ubuntu.com/ubuntu-ports/pool/main/g/glibc/${GLIBC_FILENAME}"
           
@@ -45,8 +44,9 @@ jobs:
           fi
           
           dpkg-deb -x libc6.deb /tmp/glibc_extract
-          cp /tmp/glibc_extract/lib/aarch64-linux-gnu/libc.so.6 ${CORE_LIB_DIR}/
-          cp /tmp/glibc_extract/lib/aarch64-linux-gnu/libm.so.6 ${CORE_LIB_DIR}/
+          # ĐÃ SỬA: Thay thế /lib bằng /usr/lib để phù hợp với cấu trúc gói Ubuntu hiện đại
+          cp /tmp/glibc_extract/usr/lib/aarch64-linux-gnu/libc.so.6 ${CORE_LIB_DIR}/
+          cp /tmp/glibc_extract/usr/lib/aarch64-linux-gnu/libm.so.6 ${CORE_LIB_DIR}/
           
           # --- 2. Tải và trích xuất libstdc++6 sử dụng tìm kiếm động ---
           echo "Searching for the latest libstdc++6:arm64 version..."
@@ -107,7 +107,7 @@ jobs:
             -ldl
           
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions:upload-artifact@v4
         with:
           name: ivi_home_screen_arm64
           path: |
