@@ -69,7 +69,7 @@ jobs:
           # THÊM SUDO: Cần quyền root để sao chép vào thư mục hệ thống
           sudo cp /tmp/libstdc_extract/usr/lib/aarch64-linux-gnu/libstdc++.so.6 ${CORE_LIB_DIR}/
           
-          # --- 3. Tải và trích xuất libfontconfig1 (Font Rendering Dependency) 👈 FIX SYMLINK
+          # --- 3. Tải và trích xuất libfontconfig1 (Font Rendering Dependency)
           echo "Searching for the latest libfontconfig1:arm64 version..."
           
           # Tìm kiếm file .deb
@@ -89,6 +89,49 @@ jobs:
           sudo cp /tmp/fontconfig_extract/usr/lib/aarch64-linux-gnu/libfontconfig.so.1 ${CORE_LIB_DIR}/
           # TẠO SYMLINK: Tạo libfontconfig.so để linker có thể tìm thấy -lfontconfig
           sudo ln -s libfontconfig.so.1 ${CORE_LIB_DIR}/libfontconfig.so
+          
+          # --- 4. Tải và trích xuất libfreetype6 (FreeType Font Engine Dependency) 👈 THƯ VIỆN MỚI
+          echo "Searching for the latest libfreetype6:arm64 version..."
+          
+          # Tìm kiếm file .deb
+          FREETYPE_FILENAME=$(wget -O - http://ports.ubuntu.com/ubuntu-ports/pool/main/f/freetype/ 2>/dev/null | grep 'libfreetype6_.*_arm64.deb' | tail -n 1 | grep -o 'href="[^"]*"' | head -1 | cut -d\" -f2)
+          FREETYPE_URL="http://ports.ubuntu.com/ubuntu-ports/pool/main/f/freetype/${FREETYPE_FILENAME}"
+
+          echo "Found libfreetype6:arm64 at URL: ${FREETYPE_URL}. Starting download..."
+          wget "${FREETYPE_URL}" -O libfreetype6.deb
+
+          if [ ! -f libfreetype6.deb ]; then
+             echo "ERROR: Failed to download libfreetype6 ARM64 version. Filename extracted: ${FREETYPE_FILENAME}"
+             exit 1
+          fi
+
+          dpkg-deb -x libfreetype6.deb /tmp/freetype_extract
+          # Thư viện thực tế là libfreetype.so.6
+          sudo cp /tmp/freetype_extract/usr/lib/aarch64-linux-gnu/libfreetype.so.6 ${CORE_LIB_DIR}/
+          # TẠO SYMLINK: Tạo libfreetype.so để linker có thể tìm thấy -lfreetype
+          sudo ln -s libfreetype.so.6 ${CORE_LIB_DIR}/libfreetype.so
+
+          # --- 5. Tải và trích xuất libexpat1 (XML Parser Dependency for Fontconfig) 👈 THƯ VIỆN MỚI
+          echo "Searching for the latest libexpat1:arm64 version..."
+          
+          # Tìm kiếm file .deb
+          EXPAT_FILENAME=$(wget -O - http://ports.ubuntu.com/ubuntu-ports/pool/main/e/expat/ 2>/dev/null | grep 'libexpat1_.*_arm64.deb' | tail -n 1 | grep -o 'href="[^"]*"' | head -1 | cut -d\" -f2)
+          EXPAT_URL="http://ports.ubuntu.com/ubuntu-ports/pool/main/e/expat/${EXPAT_FILENAME}"
+
+          echo "Found libexpat1:arm64 at URL: ${EXPAT_URL}. Starting download..."
+          wget "${EXPAT_URL}" -O libexpat1.deb
+
+          if [ ! -f libexpat1.deb ]; then
+             echo "ERROR: Failed to download libexpat1 ARM64 version. Filename extracted: ${EXPAT_FILENAME}"
+             exit 1
+          fi
+
+          dpkg-deb -x libexpat1.deb /tmp/expat_extract
+          # Thư viện thực tế là libexpat.so.1
+          sudo cp /tmp/expat_extract/usr/lib/aarch64-linux-gnu/libexpat.so.1 ${CORE_LIB_DIR}/
+          # TẠO SYMLINK: Tạo libexpat.so để linker có thể tìm thấy -lexpat
+          sudo ln -s libexpat.so.1 ${CORE_LIB_DIR}/libexpat.so
+
 
           # Đặt biến môi trường cho bước build
           echo "CROSS_LIB_PATH=${CORE_LIB_DIR}" >> $GITHUB_ENV
@@ -127,6 +170,8 @@ jobs:
             -lEGL \
             -lGLESv2 \
             -lfontconfig \
+            -lfreetype \
+            -lexpat \
             -lpthread \
             -ldl
           
