@@ -141,7 +141,7 @@ jobs:
             'http://ports.ubuntu.com/ubuntu-ports/pool/main/libp/libpng/' \
             'libpng.deb' \
             '/usr/lib/aarch64-linux-gnu/libpng16.so.16' \
-            'libpng.so'
+            'libpng16.so' # Sửa lỗi: Đổi symlink thành libpng16.so để khớp với cờ linker -lpng16
 
           # --- 9. Tải và trích xuất libbrotlidec1 (libbrotlidec.so.1) ---
           download_and_extract \
@@ -195,7 +195,7 @@ jobs:
             -lz \
             -lbz2 \
             -lpng16 \
-            -lbrotlidec \
+            -lbrotlidec1 \
             -lpthread \
             -ldl
           
