@@ -12,34 +12,42 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Install cross-compiler and necessary headers (AMD64)
+      - name: Install cross-compiler, tools, and Enable ARM64 Architecture
         run: |
-          # Cài đặt gcc/g++ chéo, headers AMD64 và công cụ cần thiết.
+          # 1. Cài đặt các công cụ chéo và headers AMD64
           sudo apt-get update -o Acquire::Retries=3 || true 
           sudo apt-get install -y --no-install-recommends \
             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
             libwayland-dev libegl1-mesa-dev libgles2-mesa-dev \
-            wget dpkg-dev binutils
+            dpkg-dev binutils
+          
+          # 2. BẬT kiến trúc ARM64 và thử cập nhật lại (Bước này thường thất bại, nhưng cần thiết cho download)
+          sudo dpkg --add-architecture arm64
+          sudo apt-get update -o Acquire::Retries=3 || true 
 
-      - name: Manually Install Core ARM64 Runtime Libraries (Final Attempt) 👈 Đã cập nhật URL
+      - name: Manually Install Core ARM64 Runtime Libraries (Using apt-get download)
         run: |
           # Thiết lập thư mục cho thư viện chéo
           CORE_LIB_DIR=/usr/aarch64-linux-gnu/lib
           mkdir -p ${CORE_LIB_DIR}
           
-          # 1. Tải và trích xuất libc6 (glibc)
-          # Sử dụng phiên bản 2.35 mới nhất
-          echo "Installing libc6:arm64 manually..."
-          wget -q http://ports.ubuntu.com/ubuntu-ports/pool/main/g/glibc/libc6_2.35-0ubuntu3.6_arm64.deb -O libc6.deb
-          dpkg-deb -x libc6.deb /tmp/glibc_extract
+          # 1. Tải và trích xuất libc6 (glibc) - Tải bằng tên gói thay vì URL tĩnh
+          echo "Downloading and installing libc6:arm64..."
+          # Lệnh này tải tệp .deb vào thư mục hiện tại
+          apt-get download libc6:arm64
+          # Tìm tên file đã tải (ví dụ: libc6_2.35-0ubuntu3.7_arm64.deb)
+          LIBC_DEB=$(find . -maxdepth 1 -name "libc6_*.deb" -print -quit)
+          
+          dpkg-deb -x ${LIBC_DEB} /tmp/glibc_extract
           cp /tmp/glibc_extract/lib/aarch64-linux-gnu/libc.so.6 ${CORE_LIB_DIR}/
           cp /tmp/glibc_extract/lib/aarch64-linux-gnu/libm.so.6 ${CORE_LIB_DIR}/
           
-          # 2. Tải và trích xuất libstdc++6
-          # Sử dụng phiên bản 12.3.0 mới nhất
-          echo "Installing libstdc++6:arm64 manually..."
-          wget -q http://ports.ubuntu.com/ubuntu-ports/pool/main/g/gcc-12/libstdc++6_12.3.0-1ubuntu1~22.04_arm64.deb -O libstdc++.deb
-          dpkg-deb -x libstdc++.deb /tmp/libstdc_extract
+          # 2. Tải và trích xuất libstdc++6 - Tải bằng tên gói thay vì URL tĩnh
+          echo "Downloading and installing libstdc++6:arm64..."
+          apt-get download libstdc++6:arm64
+          LIBSTDC_DEB=$(find . -maxdepth 1 -name "libstdc++6_*.deb" -print -quit)
+          
+          dpkg-deb -x ${LIBSTDC_DEB} /tmp/libstdc_extract
           cp /tmp/libstdc_extract/usr/lib/aarch64-linux-gnu/libstdc++.so.6 ${CORE_LIB_DIR}/
           
           # Đặt biến môi trường cho bước build
