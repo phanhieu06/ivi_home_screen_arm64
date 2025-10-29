@@ -12,31 +12,50 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Install cross-compiler and necessary headers
+      - name: Install cross-compiler and necessary headers (AMD64)
         run: |
-          # 1. Thiết lập kiến trúc và cập nhật APT
-          sudo dpkg --add-architecture arm64
+          # 1. Cập nhật và cài đặt công cụ cần thiết (gcc/g++ chéo, headers AMD64, wget, ar)
           sudo apt-get update -o Acquire::Retries=3 || true 
-          
-          # 2. Cài đặt GCC/G++ chéo, Header files (amd64) và các công cụ liên quan
           sudo apt-get install -y --no-install-recommends \
             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
             libwayland-dev libegl1-mesa-dev libgles2-mesa-dev \
-            libc6:arm64 libstdc++6:arm64 ar 
+            wget ar dpkg-dev
 
-      - name: Create ARM64 Dummy Libraries (Workaround for Linker) 
+      - name: Manually Install Core ARM64 Runtime Libraries
+        run: |
+          CORE_LIB_DIR=/usr/aarch64-linux-gnu/lib
+          mkdir -p ${CORE_LIB_DIR}
+          
+          # Tải và trích xuất libc6 (Debian 11/Ubuntu 22.04 tương thích)
+          # Đây là phiên bản 2.35 cho Ubuntu 22.04 (Jammy)
+          echo "Installing libc6:arm64 manually..."
+          wget -q http://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.35-0ubuntu3.4_arm64.deb -O libc6.deb
+          dpkg-deb -x libc6.deb /tmp/glibc_extract
+          cp /tmp/glibc_extract/lib/aarch64-linux-gnu/libc.so.6 ${CORE_LIB_DIR}/
+          cp /tmp/glibc_extract/lib/aarch64-linux-gnu/libm.so.6 ${CORE_LIB_DIR}/
+          
+          # Tải và trích xuất libstdc++6
+          # Đây là phiên bản cho GCC 12 (Ubuntu 22.04)
+          echo "Installing libstdc++6:arm64 manually..."
+          wget -q http://archive.ubuntu.com/ubuntu/pool/main/g/gcc-12/libstdc++6_12.3.0-1ubuntu1~22.04_arm64.deb -O libstdc++.deb
+          dpkg-deb -x libstdc++.deb /tmp/libstdc_extract
+          cp /tmp/libstdc_extract/usr/lib/aarch64-linux-gnu/libstdc++.so.6 ${CORE_LIB_DIR}/
+          
+          # Đặt đường dẫn lib chéo
+          echo "export CROSS_LIB_PATH=/usr/aarch64-linux-gnu/lib" >> $GITHUB_ENV
+          
+      - name: Create ARM64 Dummy Libraries (for Wayland/EGL/GLESv2)
         id: create_dummy_libs
         run: |
           # Tạo thư mục cho thư viện giả
-          DUMMY_DIR=./arm64_linker_libs
+          DUMMY_DIR=./arm64_dummy_libs
           mkdir -p ${DUMMY_DIR}
           
-          # Tạo thư viện giả rỗng (.so) cho ARM64
           echo 'Creating dummy libraries: libwayland-client.so, libEGL.so, libGLESv2.so'
           
-          # Hàm tạo file .so rỗng cho linker
           create_dummy_lib() {
               local lib_name=$1
+              # Tạo file .so rỗng cho linker
               aarch64-linux-gnu-ar qcs ${DUMMY_DIR}/lib${lib_name}.a
               aarch64-linux-gnu-g++ -shared -o ${DUMMY_DIR}/lib${lib_name}.so ${DUMMY_DIR}/lib${lib_name}.a
           }
@@ -45,15 +64,15 @@ jobs:
           create_dummy_lib EGL
           create_dummy_lib GLESv2
           
-          # Đặt biến môi trường cho bước build tiếp theo
           echo "DUMMY_DIR=${DUMMY_DIR}" >> $GITHUB_ENV
 
       - name: Build ARM64 binary
         run: |
-          # Dùng cờ -L để chỉ định thư mục chứa thư viện giả cho trình liên kết chéo
+          # Bổ sung -L cho thư mục lib chéo và thư viện giả
           aarch64-linux-gnu-g++ -std=c++17 \
             -I./engine_arm64 \
             -L./engine_arm64 \
+            -L${{ env.CROSS_LIB_PATH }} \
             -L${{ env.DUMMY_DIR }} \
             -o ivi_home_screen \
             main.cpp \
@@ -63,7 +82,7 @@ jobs:
             -lGLESv2 \
             -lpthread \
             -ldl
-
+          
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
