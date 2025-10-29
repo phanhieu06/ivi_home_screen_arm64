@@ -39,8 +39,8 @@ jobs:
               
               echo "Searching for pattern: ${SEARCH_PATTERN} from ${BASE_URL}"
               
-              # TÌM KIẾM MẠNH MẼ: Tìm kiếm thuộc tính href chứa tên file, sau đó cắt lấy tên file chính xác.
-              FILENAME=$(wget -O - ${BASE_URL} 2>/dev/null | grep -o 'href="'${SEARCH_PATTERN}'"' | tail -n 1 | cut -d\" -f2)
+              # TÌM KIẾM CẢI TIẾN: Tìm tất cả các file khớp và chọn phiên bản mới nhất
+              FILENAME=$(wget -O - ${BASE_URL} 2>/dev/null | grep -o 'href="'${SEARCH_PATTERN}'"' | cut -d\" -f2 | sort -V | tail -n 1)
               
               if [ -z "${FILENAME}" ]; then
                  echo "WARNING: Failed to find filename matching pattern: ${SEARCH_PATTERN}. Skipping manual download."
@@ -52,7 +52,7 @@ jobs:
               wget "${URL}" -O ${OUTPUT_FILENAME}
               
               if [ ! -f ${OUTPUT_FILENAME} ]; then
-                 echo "ERROR: Failed to download ${OUTPUT_FILENAME}."
+                 echo "ERROR: Failed to download ${OUTPUT_FILENAME}. Skipping extraction."
                  return 1
               fi
               
@@ -141,7 +141,13 @@ jobs:
             'http://ports.ubuntu.com/ubuntu-ports/pool/main/libp/libpng/' \
             'libpng.deb' \
             '/usr/lib/aarch64-linux-gnu/libpng16.so.16' \
-            'libpng.so' # Đã sửa: Symlink ngắn gọn (libpng.so) để khớp với cờ linker (-lpng)
+            'libpng.so'
+          
+          # KIỂM TRA QUAN TRỌNG: Xác nhận symlink libpng.so đã được tạo
+          if [ ! -f ${CORE_LIB_DIR}/libpng.so ]; then
+             echo "FATAL ERROR: Symlink libpng.so was not created successfully. Skipping linker step."
+             exit 1
+          fi
 
           # --- 9. Tải và trích xuất libbrotlidec1 (libbrotlidec.so.1) ---
           download_and_extract \
@@ -149,8 +155,14 @@ jobs:
             'http://ports.ubuntu.com/ubuntu-ports/pool/main/b/brotli/' \
             'libbrotli.deb' \
             '/usr/lib/aarch64-linux-gnu/libbrotlidec.so.1' \
-            'libbrotlidec.so' # Đã sửa: Symlink ngắn gọn (libbrotlidec.so) để khớp với cờ linker (-lbrotlidec)
+            'libbrotlidec.so'
             
+          # KIỂM TRA QUAN TRỌNG: Xác nhận symlink libbrotlidec.so đã được tạo
+          if [ ! -f ${CORE_LIB_DIR}/libbrotlidec.so ]; then
+             echo "FATAL ERROR: Symlink libbrotlidec.so was not created successfully. Skipping linker step."
+             exit 1
+          fi
+
           # Đặt biến môi trường cho bước build
           echo "CROSS_LIB_PATH=${CORE_LIB_DIR}" >> $GITHUB_ENV
           
