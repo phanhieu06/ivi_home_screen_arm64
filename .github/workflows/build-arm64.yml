@@ -1,88 +1,78 @@
-name: Build ARM64 Binary
+  - name: Install cross-compiler and necessary headers (AMD64)
+    run: |
+      # 1. Cài đặt các công cụ chéo và headers AMD64 (APT chỉ dùng cho x86_64/AMD64)
+      sudo apt-get update -o Acquire::Retries=3 || true 
+      sudo apt-get install -y --no-install-recommends \
+        gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+        libwayland-dev libegl1-mesa-dev libgles2-mesa-dev \
+        wget dpkg-dev binutils
 
-on:
-  workflow_dispatch:
-  push:
-    branches: [ main ]
+  - name: Manually Install Core ARM64 Runtime Libraries (Final Stable URLs)
+    run: |
+      # Thiết lập thư mục cho thư viện chéo
+      CORE_LIB_DIR=/usr/aarch64-linux-gnu/lib
+      mkdir -p ${CORE_LIB_DIR}
+      
+      # 1. Tải và trích xuất libc6 (glibc) - URL mới nhất từ ports.ubuntu.com
+      echo "Installing libc6:arm64 manually..."
+      wget -q http://ports.ubuntu.com/ubuntu-ports/pool/main/g/glibc/libc6_2.35-0ubuntu3.6_arm64.deb -O libc6.deb
+      dpkg-deb -x libc6.deb /tmp/glibc_extract_c
+      # Sao chép các thư viện cần thiết: libc.so.6 và libm.so.6
+      cp /tmp/glibc_extract_c/lib/aarch64-linux-gnu/libc.so.6 ${CORE_LIB_DIR}/
+      cp /tmp/glibc_extract_c/lib/aarch64-linux-gnu/libm.so.6 ${CORE_LIB_DIR}/
+      
+      # 2. Tải và trích xuất libstdc++6 - URL mới nhất từ ports.ubuntu.com
+      echo "Installing libstdc++6:arm64 manually..."
+      wget -q http://ports.ubuntu.com/ubuntu-ports/pool/main/g/gcc-12/libstdc++6_12.3.0-1ubuntu1~22.04_arm64.deb -O libstdc++.deb
+      dpkg-deb -x libstdc++.deb /tmp/libstdc_extract_c
+      # Sao chép libstdc++.so.6
+      cp /tmp/libstdc_extract_c/usr/lib/aarch64-linux-gnu/libstdc++.so.6 ${CORE_LIB_DIR}/
+      
+      # Đặt biến môi trường cho bước build
+      echo "CROSS_LIB_PATH=${CORE_LIB_DIR}" >> $GITHUB_ENV
+      
+  - name: Create ARM64 Dummy Libraries (for Wayland/EGL/GLESv2)
+    id: create_dummy_libs
+    run: |
+      DUMMY_DIR=./arm64_dummy_libs
+      mkdir -p ${DUMMY_DIR}
+      
+      echo 'Creating dummy libraries: libwayland-client.so, libEGL.so, libGLESv2.so'
+      
+      create_dummy_lib() {
+          local lib_name=$1
+          # Tạo file .a và sau đó là file .so rỗng cho linker
+          aarch64-linux-gnu-ar qcs ${DUMMY_DIR}/lib${lib_name}.a
+          aarch64-linux-gnu-g++ -shared -o ${DUMMY_DIR}/lib${lib_name}.so ${DUMMY_DIR}/lib${lib_name}.a
+      }
 
-jobs:
-  build-arm64:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
+      create_dummy_lib wayland-client
+      create_dummy_lib EGL
+      create_dummy_lib GLESv2
+      
+      echo "DUMMY_DIR=${DUMMY_DIR}" >> $GITHUB_ENV
 
-      - name: Install cross-compiler and necessary headers (AMD64)
-        run: |
-          # Cài đặt gcc/g++ chéo, headers AMD64 và công cụ cần thiết.
-          sudo apt-get update -o Acquire::Retries=3 || true 
-          sudo apt-get install -y --no-install-recommends \
-            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
-            libwayland-dev libegl1-mesa-dev libgles2-mesa-dev \
-            wget dpkg-dev binutils
-
-      - name: Manually Install Core ARM64 Runtime Libraries
-        run: |
-          # Thiết lập thư mục cho thư viện chéo
-          CORE_LIB_DIR=/usr/aarch64-linux-gnu/lib
-          mkdir -p ${CORE_LIB_DIR}
-          
-          # Tải và trích xuất libc6 (glibc) - ĐÃ CẬP NHẬT URL VÀ BỎ CỜ -q
-          echo "Installing libc6:arm64 manually..."
-          wget http://ports.ubuntu.com/pool/main/g/glibc/libc6_2.35-0ubuntu3.6_arm64.deb -O libc6.deb
-          dpkg-deb -x libc6.deb /tmp/glibc_extract
-          cp /tmp/glibc_extract/lib/aarch64-linux-gnu/libc.so.6 ${CORE_LIB_DIR}/
-          cp /tmp/glibc_extract/lib/aarch64-linux-gnu/libm.so.6 ${CORE_LIB_DIR}/
-          
-          # Tải và trích xuất libstdc++6 - ĐÃ CẬP NHẬT URL
-          echo "Installing libstdc++6:arm64 manually..."
-          wget http://ports.ubuntu.com/pool/main/g/gcc-12/libstdc++6_12.3.0-1ubuntu1~22.04_arm64.deb -O libstdc++.deb
-          dpkg-deb -x libstdc++.deb /tmp/libstdc_extract
-          cp /tmp/libstdc_extract/usr/lib/aarch64-linux-gnu/libstdc++.so.6 ${CORE_LIB_DIR}/
-          
-          # Đặt biến môi trường cho bước build
-          echo "CROSS_LIB_PATH=${CORE_LIB_DIR}" >> $GITHUB_ENV
-          
-      - name: Create ARM64 Dummy Libraries (for Wayland/EGL/GLESv2)
-        id: create_dummy_libs
-        run: |
-          DUMMY_DIR=./arm64_dummy_libs
-          mkdir -p ${DUMMY_DIR}
-          
-          echo 'Creating dummy libraries: libwayland-client.so, libEGL.so, libGLESv2.so'
-          
-          create_dummy_lib() {
-              local lib_name=$1
-              aarch64-linux-gnu-ar qcs ${DUMMY_DIR}/lib${lib_name}.a
-              aarch64-linux-gnu-g++ -shared -o ${DUMMY_DIR}/lib${lib_name}.so ${DUMMY_DIR}/lib${lib_name}.a
-          }
-
-          create_dummy_lib wayland-client
-          create_dummy_lib EGL
-          create_dummy_lib GLESv2
-          
-          echo "DUMMY_DIR=${DUMMY_DIR}" >> $GITHUB_ENV
-
-      - name: Build ARM64 binary
-        run: |
-          aarch64-linux-gnu-g++ -std=c++17 \
-            -I./engine_arm64 \
-            -L./engine_arm64 \
-            -L${{ env.CROSS_LIB_PATH }} \
-            -L${{ env.DUMMY_DIR }} \
-            -o ivi_home_screen \
-            main.cpp \
-            -lflutter_engine \
-            -lwayland-client \
-            -lEGL \
-            -lGLESv2 \
-            -lpthread \
-            -ldl
-          
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ivi_home_screen_arm64
-          path: |
-            ivi_home_screen
-            engine_arm64/libflutter_engine.so
+  - name: Build ARM64 binary
+    run: |
+      # Lệnh liên kết cuối cùng
+      aarch64-linux-gnu-g++ -std=c++17 \
+        -I./engine_arm64 \
+        -L./engine_arm64 \
+        -L${{ env.CROSS_LIB_PATH }} \
+        -L${{ env.DUMMY_DIR }} \
+        -o ivi_home_screen \
+        main.cpp \
+        -lflutter_engine \
+        -lwayland-client \
+        -lEGL \
+        -lGLESv2 \
+        -lpthread \
+        -ldl
+      
+  - name: Upload artifact
+    uses: actions/upload-artifact@v4
+    with:
+      name: ivi_home_screen_arm64
+      path: |
+        ivi_home_screen
+        engine_arm64/libflutter_engine.so
