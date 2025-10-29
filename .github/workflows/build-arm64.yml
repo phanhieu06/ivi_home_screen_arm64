@@ -141,7 +141,7 @@ jobs:
             'http://ports.ubuntu.com/ubuntu-ports/pool/main/libp/libpng/' \
             'libpng.deb' \
             '/usr/lib/aarch64-linux-gnu/libpng16.so.16' \
-            'libpng16.so' # Sửa lỗi: Đổi symlink thành libpng16.so để khớp với cờ linker -lpng16
+            'libpng16.so' # Symlink được đặt chính xác là libpng16.so
 
           # --- 9. Tải và trích xuất libbrotlidec1 (libbrotlidec.so.1) ---
           download_and_extract \
@@ -149,7 +149,7 @@ jobs:
             'http://ports.ubuntu.com/ubuntu-ports/pool/main/b/brotli/' \
             'libbrotli.deb' \
             '/usr/lib/aarch64-linux-gnu/libbrotlidec.so.1' \
-            'libbrotlidec.so'
+            'libbrotlidec1.so' # SỬA LỖI: Đổi symlink thành libbrotlidec1.so để khớp với cờ linker -lbrotlidec1
             
           # Đặt biến môi trường cho bước build
           echo "CROSS_LIB_PATH=${CORE_LIB_DIR}" >> $GITHUB_ENV
