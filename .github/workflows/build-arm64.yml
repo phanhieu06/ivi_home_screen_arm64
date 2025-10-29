@@ -69,7 +69,7 @@ jobs:
           # THÊM SUDO: Cần quyền root để sao chép vào thư mục hệ thống
           sudo cp /tmp/libstdc_extract/usr/lib/aarch64-linux-gnu/libstdc++.so.6 ${CORE_LIB_DIR}/
           
-          # --- 3. Tải và trích xuất libfontconfig1 (Font Rendering Dependency) 👈 NEW BLOCK
+          # --- 3. Tải và trích xuất libfontconfig1 (Font Rendering Dependency) 👈 FIX SYMLINK
           echo "Searching for the latest libfontconfig1:arm64 version..."
           
           # Tìm kiếm file .deb
@@ -87,6 +87,8 @@ jobs:
           dpkg-deb -x libfontconfig1.deb /tmp/fontconfig_extract
           # Fontconfig library là libfontconfig.so.1
           sudo cp /tmp/fontconfig_extract/usr/lib/aarch64-linux-gnu/libfontconfig.so.1 ${CORE_LIB_DIR}/
+          # TẠO SYMLINK: Tạo libfontconfig.so để linker có thể tìm thấy -lfontconfig
+          sudo ln -s libfontconfig.so.1 ${CORE_LIB_DIR}/libfontconfig.so
 
           # Đặt biến môi trường cho bước build
           echo "CROSS_LIB_PATH=${CORE_LIB_DIR}" >> $GITHUB_ENV
