@@ -21,7 +21,7 @@ jobs:
             libwayland-dev libegl1-mesa-dev libgles2-mesa-dev \
             wget dpkg-dev binutils
 
-      - name: Manually Install Core ARM64 Runtime Libraries (Dynamic URL Search) 👈 Giải pháp cuối cùng
+      - name: Manually Install Core ARM64 Runtime Libraries (Dynamic URL Search - Reworked) 👈 Fix Robustness
         run: |
           # Thiết lập thư mục cho thư viện chéo
           CORE_LIB_DIR=/usr/aarch64-linux-gnu/lib
@@ -30,8 +30,9 @@ jobs:
           # --- 1. Tải và trích xuất libc6 (glibc) sử dụng tìm kiếm động ---
           echo "Searching for the latest libc6:arm64 version..."
           
-          # Lấy tên file mới nhất từ trang index (ví dụ: libc6_2.35-0ubuntu3.9_arm64.deb)
-          GLIBC_FILENAME=$(wget -O - http://ports.ubuntu.com/ubuntu-ports/pool/main/g/glibc/ 2>/dev/null | grep -o 'libc6_.*_arm64.deb' | tail -n 1)
+          # FIX: Sử dụng chuỗi lệnh grep/cut để trích xuất TÊN FILE CHÍNH XÁC từ thuộc tính href, loại bỏ HTML thừa.
+          # 1. wget index. 2. grep dòng chứa tên file. 3. tail lấy dòng mới nhất. 4. grep -o lấy phần href="...". 5. cut lấy giá trị giữa hai dấu nháy kép.
+          GLIBC_FILENAME=$(wget -O - http://ports.ubuntu.com/ubuntu-ports/pool/main/g/glibc/ 2>/dev/null | grep 'libc6_.*_arm64.deb' | tail -n 1 | grep -o 'href="[^"]*"' | head -1 | cut -d\" -f2)
           GLIBC_URL="http://ports.ubuntu.com/ubuntu-ports/pool/main/g/glibc/${GLIBC_FILENAME}"
           
           echo "Found libc6:arm64 at URL: ${GLIBC_URL}. Starting download..."
@@ -39,7 +40,7 @@ jobs:
           
           # KIỂM TRA LỖI: Nếu tải xuống thất bại, dừng lại ngay
           if [ ! -f libc6.deb ]; then
-             echo "ERROR: Failed to download libc6 ARM64 version. Please check the base URL."
+             echo "ERROR: Failed to download libc6 ARM64 version. Filename extracted: ${GLIBC_FILENAME}"
              exit 1
           fi
           
@@ -50,8 +51,8 @@ jobs:
           # --- 2. Tải và trích xuất libstdc++6 sử dụng tìm kiếm động ---
           echo "Searching for the latest libstdc++6:arm64 version..."
           
-          # Lấy tên file mới nhất từ trang index (ví dụ: libstdc++6_12.3.0-1ubuntu1~22.04_arm64.deb)
-          LIBSTDC_FILENAME=$(wget -O - http://ports.ubuntu.com/ubuntu-ports/pool/main/g/gcc-12/ 2>/dev/null | grep -o 'libstdc++6_.*_arm64.deb' | tail -n 1)
+          # FIX: Sử dụng chuỗi lệnh grep/cut để trích xuất TÊN FILE CHÍNH XÁC từ thuộc tính href.
+          LIBSTDC_FILENAME=$(wget -O - http://ports.ubuntu.com/ubuntu-ports/pool/main/g/gcc-12/ 2>/dev/null | grep 'libstdc++6_.*_arm64.deb' | tail -n 1 | grep -o 'href="[^"]*"' | head -1 | cut -d\" -f2)
           LIBSTDC_URL="http://ports.ubuntu.com/ubuntu-ports/pool/main/g/gcc-12/${LIBSTDC_FILENAME}"
 
           echo "Found libstdc++6:arm64 at URL: ${LIBSTDC_URL}. Starting download..."
@@ -59,7 +60,7 @@ jobs:
 
           # KIỂM TRA LỖI: Nếu tải xuống thất bại, dừng lại ngay
           if [ ! -f libstdc++.deb ]; then
-             echo "ERROR: Failed to download libstdc++6 ARM64 version. Please check the base URL."
+             echo "ERROR: Failed to download libstdc++6 ARM64 version. Filename extracted: ${LIBSTDC_FILENAME}"
              exit 1
           fi
 
