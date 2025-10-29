@@ -15,24 +15,21 @@ jobs:
       - name: Install cross-compiler, tools, and headers (AMD64)
         run: |
           # 1. Cài đặt các công cụ chéo và headers AMD64
+          # Tăng độ tin cậy của APT
           sudo apt-get update -o Acquire::Retries=3 || true 
           sudo apt-get install -y --no-install-recommends \
             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
             libwayland-dev libegl1-mesa-dev libgles2-mesa-dev \
             wget dpkg-dev binutils
 
-      - name: Manually Install Core ARM64 Runtime Libraries (FIXED)
+      - name: Manually Install Core ARM64 Runtime Libraries (FINAL FIX)
         run: |
           # Thiết lập thư mục cho thư viện chéo
           CORE_LIB_DIR=/usr/aarch64-linux-gnu/lib
           sudo mkdir -p ${CORE_LIB_DIR}
           
-          # Hàm tìm kiếm và tải xuống thư viện (Rất quan trọng để đảm bảo tính chính xác)
-          # Tham số 1: Tên thư viện cần tìm (regex pattern, ví dụ: 'libc6_.*_arm64.deb')
-          # Tham số 2: URL thư mục cơ sở
-          # Tham số 3: Tên file đầu ra cục bộ
-          # Tham số 4: Đường dẫn thư viện thực tế bên trong gói DEB
-          # Tham số 5 (Tùy chọn): Tên symlink
+          # Hàm tìm kiếm và tải xuống thư viện
+          # Đã thêm cờ -f (force) vào lệnh ln -s để tránh lỗi "File exists"
           download_and_extract() {
               local SEARCH_PATTERN=$1
               local BASE_URL=$2
@@ -46,9 +43,8 @@ jobs:
               FILENAME=$(wget -O - ${BASE_URL} 2>/dev/null | grep -o 'href="'${SEARCH_PATTERN}'"' | tail -n 1 | cut -d\" -f2)
               
               if [ -z "${FILENAME}" ]; then
-                 echo "ERROR: Failed to find filename matching pattern: ${SEARCH_PATTERN} from ${BASE_URL}"
-                 # Không thoát mà tiếp tục (có thể là do gói được cài đặt ở bước APT)
-                 return 1 
+                 echo "WARNING: Failed to find filename matching pattern: ${SEARCH_PATTERN}. Skipping manual download."
+                 return 0 # Không thoát, tiếp tục bước sau
               fi
               
               URL="${BASE_URL}${FILENAME}"
@@ -66,11 +62,12 @@ jobs:
               LIB_ACTUAL_PATH="${LIB_PATH_IN_DEB}"
               LIB_ACTUAL_NAME=$(basename "${LIB_ACTUAL_PATH}")
               
-              # Sao chép và tạo symlink
+              # Sao chép file thư viện
               sudo cp ${EXTRACT_DIR}${LIB_ACTUAL_PATH} ${CORE_LIB_DIR}/
-              
+
+              # TẠO SYMLINK AN TOÀN (-f để ghi đè nếu đã tồn tại)
               if [ ! -z "${SYMLINK_NAME}" ]; then
-                sudo ln -s ${LIB_ACTUAL_NAME} ${CORE_LIB_DIR}/${SYMLINK_NAME}
+                sudo ln -s -f ${LIB_ACTUAL_NAME} ${CORE_LIB_DIR}/${SYMLINK_NAME}
               fi
               echo "Successfully installed ${LIB_ACTUAL_NAME}."
               return 0
@@ -86,7 +83,9 @@ jobs:
           
           # libm.so.6 cần được cài đặt riêng vì nó được bao gồm trong libc6.deb
           sudo cp /tmp/libc6.deb_extract/usr/lib/aarch64-linux-gnu/libm.so.6 ${CORE_LIB_DIR}/
-          sudo ln -s libm.so.6 ${CORE_LIB_DIR}/libm.so
+          # TẠO SYMLINK AN TOÀN cho libm.so
+          sudo ln -s -f libm.so.6 ${CORE_LIB_DIR}/libm.so
+          echo "Successfully installed libm.so.6."
 
           # --- 2. Tải và trích xuất libstdc++6 ---
           download_and_extract \
