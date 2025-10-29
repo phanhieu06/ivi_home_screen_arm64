@@ -15,7 +15,6 @@ jobs:
       - name: Install cross-compiler and necessary headers (AMD64)
         run: |
           # Cài đặt gcc/g++ chéo, headers AMD64 và công cụ cần thiết.
-          # Sử dụng binutils (chứa ar) và dpkg-dev.
           sudo apt-get update -o Acquire::Retries=3 || true 
           sudo apt-get install -y --no-install-recommends \
             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
@@ -28,16 +27,16 @@ jobs:
           CORE_LIB_DIR=/usr/aarch64-linux-gnu/lib
           mkdir -p ${CORE_LIB_DIR}
           
-          # Tải và trích xuất libc6 (glibc)
+          # Tải và trích xuất libc6 (glibc) - ĐÃ CẬP NHẬT URL VÀ BỎ CỜ -q
           echo "Installing libc6:arm64 manually..."
-          wget -q http://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.35-0ubuntu3.4_arm64.deb -O libc6.deb
+          wget http://ports.ubuntu.com/pool/main/g/glibc/libc6_2.35-0ubuntu3.6_arm64.deb -O libc6.deb
           dpkg-deb -x libc6.deb /tmp/glibc_extract
           cp /tmp/glibc_extract/lib/aarch64-linux-gnu/libc.so.6 ${CORE_LIB_DIR}/
           cp /tmp/glibc_extract/lib/aarch64-linux-gnu/libm.so.6 ${CORE_LIB_DIR}/
           
-          # Tải và trích xuất libstdc++6
+          # Tải và trích xuất libstdc++6 - ĐÃ CẬP NHẬT URL
           echo "Installing libstdc++6:arm64 manually..."
-          wget -q http://archive.ubuntu.com/ubuntu/pool/main/g/gcc-12/libstdc++6_12.3.0-1ubuntu1~22.04_arm64.deb -O libstdc++.deb
+          wget http://ports.ubuntu.com/pool/main/g/gcc-12/libstdc++6_12.3.0-1ubuntu1~22.04_arm64.deb -O libstdc++.deb
           dpkg-deb -x libstdc++.deb /tmp/libstdc_extract
           cp /tmp/libstdc_extract/usr/lib/aarch64-linux-gnu/libstdc++.so.6 ${CORE_LIB_DIR}/
           
@@ -54,7 +53,6 @@ jobs:
           
           create_dummy_lib() {
               local lib_name=$1
-              # aarch64-linux-gnu-ar được cung cấp bởi gói binutils-aarch64-linux-gnu đã được cài đặt
               aarch64-linux-gnu-ar qcs ${DUMMY_DIR}/lib${lib_name}.a
               aarch64-linux-gnu-g++ -shared -o ${DUMMY_DIR}/lib${lib_name}.so ${DUMMY_DIR}/lib${lib_name}.a
           }
@@ -67,7 +65,6 @@ jobs:
 
       - name: Build ARM64 binary
         run: |
-          # Chỉ định đường dẫn thư viện thủ công và thư viện giả
           aarch64-linux-gnu-g++ -std=c++17 \
             -I./engine_arm64 \
             -L./engine_arm64 \
