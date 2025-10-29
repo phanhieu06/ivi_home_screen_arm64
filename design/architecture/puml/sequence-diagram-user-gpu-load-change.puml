@@ -1,0 +1,48 @@
+@startuml
+!theme plain
+
+title シーケンス図: ユーザーによるGPU負荷変更 (v2.8)
+' 標準の非同期矢印 (->>) を使用
+
+actor "ユーザー" as User
+
+box "Main Thread" #LightBlue
+    participant ":GpuLoadControllerUI" as View
+    participant ":HomeViewModel" as ViewModel
+    participant ":GpuLoadGenerator" as GpuGen
+    entity "GPU" as GpuResource
+end box
+
+autonumber "<b>[0]"
+
+' 同期コール
+User -> View: 負荷調整コントロールを操作
+activate View
+
+' 同期コール
+View -> ViewModel: updateGpuLoad(newValue)
+deactivate View
+
+activate ViewModel
+' 同期コール
+ViewModel -> GpuGen: setLoad(target)
+activate GpuGen
+
+' 同期コール
+GpuGen -> GpuResource: 描画タスクを実行
+deactivate GpuGen
+
+' 非同期通知
+GpuGen ->> ViewModel: 設定負荷率を通知(applied_percentage)
+
+ViewModel -> ViewModel: 状態を更新
+
+' 非同期通知
+ViewModel ->> View: 状態変更を通知
+deactivate ViewModel
+
+activate View
+View -> View: UIを再描画
+deactivate View
+
+@enduml

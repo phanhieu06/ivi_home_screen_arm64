@@ -1,0 +1,39 @@
+name: Build ARM64 Binary
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-arm64:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v3
+
+      - name: Install cross-compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libwayland-dev libegl1-mesa-dev libgles2-mesa-dev
+
+      - name: Build ARM64 binary
+        run: |
+          aarch64-linux-gnu-g++ -std=c++17 \
+            -I./engine_arm64 \
+            -L./engine_arm64 \
+            -o ivi_home_screen \
+            main.cpp \
+            -lflutter_engine \
+            -lwayland-client \
+            -lEGL \
+            -lGLESv2 \
+            -lpthread \
+            -ldl
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ivi_home_screen_arm64
+          path: |
+            ivi_home_screen

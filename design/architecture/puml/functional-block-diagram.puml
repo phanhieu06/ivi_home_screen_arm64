@@ -1,0 +1,85 @@
+@startuml
+!theme plain
+
+title 機能ブロック図: IVI負荷App - MVVM + フィードバックループ
+
+'凡例 (Legend)
+'実線 (-->): 直接的なメソッド呼び出し、またはコマンド発行 (Direct Call / Command)
+'破線 (..>): 非同期の通知、またはデータバインディングによる更新 (Notification / Data Binding)
+
+' 外部システム
+cloud "外部システム (External Systems)" {
+    node "外部PC負荷制御" as ExtPC
+    node "AI App" as AIApp
+}
+
+package "IVI負荷App (Flutter)" {
+
+    ' ### View層 ###
+    package "View層 (View Layer)" {
+        rectangle "Home画面" as HomeScreen
+        rectangle "AIアプリ表示" as AiUI
+        rectangle "CPU負荷調整" as CpuUI
+        rectangle "GPU負荷調整" as GpuUI
+        
+        ' Viewの親子関係
+        HomeScreen --> AiUI
+        HomeScreen --> CpuUI
+        HomeScreen --> GpuUI
+    }
+
+    ' ### ViewModel層 ###
+    package "ViewModel層 (ViewModel Layer)" {
+        rectangle "ホーム画面ViewModel" as ViewModel
+    }
+
+    ' ### Model層 ###
+    package "Model層 (Model Layer)" {
+        rectangle "IPC通信受信" as IpcReceiver
+        rectangle "CPU負荷生成" as CpuLoadGenerator
+        rectangle "GPU負荷生成" as GpuLoadGenerator
+    }
+
+    ' ### システムリソース ###
+    package "システムリソース (System Resources)" {
+        rectangle "CPU"
+        rectangle "GPU"
+    }
+}
+
+' === データフローとコントロールフロー (Data/Control Flows) ===
+
+' --- 1. ユーザー/外部からの入力 (Input) ---
+' ViewからViewModelへユーザー操作を通知
+CpuUI -up-> ViewModel : 1a. 目標負荷設定
+GpuUI -up-> ViewModel : 1a. 目標負荷設定
+
+' 外部システムからModelへIPC経由で指示
+ExtPC -down-> IpcReceiver : 1b. IPC経由で負荷指示
+AIApp -down-> IpcReceiver : 1c. IPC経由でUI更新指示
+
+' --- 2. ModelからViewModelへの通知 (Notification) ---
+IpcReceiver .up.> ViewModel : 2. 外部データを通知
+
+' --- 3. ViewModelからModelへの制御 (Control) ---
+ViewModel -down-> CpuLoadGenerator : 3. 負荷生成を制御 (負荷率`%`)
+ViewModel -down-> GpuLoadGenerator : 3. 負荷生成を制御 (負荷率`%`)
+
+' --- 4. Modelからリソースへの実行 (Execution) ---
+CpuLoadGenerator -down-> CPU : 4. 計算タスク実行
+GpuLoadGenerator -down-> GPU : 4. 描画タスク実行
+
+' --- 5. リソースからModelへのフィードバック (Feedback) ---
+CPU .up.> CpuLoadGenerator : 5. 実負荷を監視
+GPU .up.> GpuLoadGenerator : 5. 実負荷を監視
+
+' --- 6. ModelからViewModelへのフィードバック (Feedback) ---
+CpuLoadGenerator .up.> ViewModel : 6. 実負荷を通知
+GpuLoadGenerator .up.> ViewModel : 6. 実負荷を通知
+
+' --- 7. ViewModelからViewへの状態更新 (Data Binding) ---
+ViewModel .down.> AiUI : 7. 状態変更通知
+ViewModel .down.> CpuUI : 7. 状態変更通知
+ViewModel .down.> GpuUI : 7. 状態変更通知
+
+@enduml

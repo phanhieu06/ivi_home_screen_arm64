@@ -1,0 +1,29 @@
+@startuml
+!theme plain
+
+title IVI負荷アプリ ユースケース図 (Use Case Diagram)
+
+' Actors
+actor "ユーザー" as User
+actor "外部PC" as ExtPC
+actor "AIアプリ" as AILogicApp
+
+' System Boundary
+rectangle "IVI負荷アプリ" {
+    usecase "CPU負荷の手動調整" as UC1
+    usecase "GPU負荷の手動調整" as UC2
+    usecase "CPU負荷の遠隔調整" as UC3
+    usecase "GPU負荷の遠隔調整" as UC4
+    usecase "UI更新指示の受信" as UC5
+}
+
+' Associations
+User -- UC1
+User -- UC2
+
+ExtPC -- UC3
+ExtPC -- UC4
+
+AILogicApp -- UC5
+
+@enduml

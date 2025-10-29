@@ -1,0 +1,56 @@
+@startuml
+!theme plain
+
+title シーケンス図: 外部システムによるCPU負荷変更 (v3.2)
+' 標準の非同期矢印 (->>) を使用
+
+actor "外部PC" as ExtPC
+
+box "Main Thread" #LightBlue
+    participant ":IpcReceiver" as Ipc
+    participant ":HomeViewModel" as ViewModel
+    participant ":CpuLoadGenerator" as CpuGen
+end box
+
+box "Background Thread" #LightGreen
+    participant ":CpuLoadWorker" as Worker
+end box
+
+entity "CPU" as CpuResource
+
+autonumber "<b>[0]"
+
+ExtPC ->> Ipc: IPCメッセージを送信\n(例: "cpu_load: 50")
+activate Ipc
+
+Ipc -> ViewModel: handleCpuLoadMessage(message)
+deactivate Ipc
+activate ViewModel
+
+ViewModel -> CpuGen: setLoad(target)
+activate CpuGen
+
+CpuGen ->> Worker: runLoad(target)
+deactivate CpuGen
+
+activate Worker
+Worker -> CpuResource: 計算タスクを実行
+
+' Worker confirms the load has been applied
+Worker ->> CpuGen: onTaskRunning(applied_percentage)
+' note: Isolate communication
+deactivate Worker
+
+activate CpuGen
+CpuGen ->> ViewModel: 設定負荷率を通知(applied_percentage)
+deactivate CpuGen
+
+ViewModel -> ViewModel: 状態を更新
+ViewModel ->> View: 状態変更を通知
+deactivate ViewModel
+
+activate View
+View -> View: UIを再描画
+deactivate View
+
+@enduml

@@ -1,0 +1,108 @@
+@startuml
+!theme plain
+
+title クラス図 (v3.0 - 最終版)
+' ユーザー提供の詳細設計と、シーケンス図の最終アーキテクチャを統合
+
+' ===================================
+' ### View層 ###
+' ===================================
+package "View層 (View Layer)" #LightBlue {
+    class AiUI {
+        + build(context: BuildContext)
+    }
+    class CpuUI {
+        + build(context: BuildContext)
+        + onIncreasePressed()
+        + onDecreasePressed()
+    }
+    class GpuUI {
+        + build(context: BuildContext)
+        + onIncreasePressed()
+        + onDecreasePressed()
+    }
+}
+
+' ===================================
+' ### ViewModel層 ###
+' ===================================
+package "ViewModel層 (ViewModel Layer)" #LightGoldenRodYellow {
+    class HomeViewModel {
+        ' --- 表示用状態 (State for UI) ---
+        + targetCpuLoad: double
+        + actualCpuLoad: double
+        + targetGpuLoad: double
+        + actualGpuLoad: double
+        + aiData: AiData
+        
+        ' --- UIからのイベントハンドラ (Event Handlers from UI) ---
+        + increaseCpuLoad()
+        + decreaseCpuLoad()
+        + increaseGpuLoad()
+        + decreaseGpuLoad()
+
+        ' --- Modelからの更新用 (Updaters from Model) ---
+        + updateActualCpuLoad(load: double)
+        + updateActualGpuLoad(load: double)
+        + updateAiData(data: AiData)
+    }
+}
+
+' ===================================
+' ### Model層 ###
+' ===================================
+package "Model層 (Model Layer)" #LightGreen {
+    class IpcReceiver {
+        - _repository: AiDataRepository
+        + startListening()
+    }
+    
+    class AiDataRepository {
+        ' ViewModelに通知するための仕組み (例: Stream)
+        + dataStream: Stream<AiData>
+        + updateData(data: String)
+    }
+
+    class CpuLoadGenerator {
+        - _worker: CpuLoadWorker
+        + setLoad(percentage: double)
+        + onActualLoad(load: double)
+    }
+
+    class CpuLoadWorker {
+        + runLoad(percentage: double)
+    }
+
+    class GpuLoadGenerator {
+        + setLoad(percentage: double)
+        + onActualLoad(load: double)
+    }
+
+    class AiData {
+        + objectName: String
+        + confidence: double
+    }
+}
+
+' ===================================
+' ### 関係性 (Relationships) ###
+' ===================================
+
+' --- View -> ViewModel ---
+CpuUI ..> HomeViewModel : uses
+GpuUI ..> HomeViewModel : uses
+AiUI ..> HomeViewModel : uses
+
+' --- ViewModel -> Model ---
+HomeViewModel ..> CpuLoadGenerator : uses
+HomeViewModel ..> GpuLoadGenerator : uses
+HomeViewModel ..> AiDataRepository : listens to
+
+' --- Model Internal ---
+IpcReceiver ..> AiDataRepository : uses
+CpuLoadGenerator ..> CpuLoadWorker : manages
+
+' --- Data Ownership ---
+HomeViewModel *-- AiData
+
+@enduml

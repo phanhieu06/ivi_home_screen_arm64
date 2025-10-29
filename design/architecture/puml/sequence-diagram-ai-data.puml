@@ -1,0 +1,41 @@
+@startuml
+!theme plain
+
+title AIアプリからのUI更新シーケンス (v2.2)
+' 既存のクラス図・ブロック図との整合性を保つため簡易化
+
+' === 参加者 ===
+actor "AI App" as AIApp
+
+box "IVI負荷App"
+    participant ":IpcReceiver" as Ipc
+    participant ":HomeViewModel" as ViewModel
+    participant ":AiUI" as View
+end box
+
+autonumber "<b>[0]"
+
+' === フロー ===
+
+' 1. AIアプリが非同期メッセージを送信
+AIApp ->> Ipc: IPCメッセージを送信
+activate Ipc
+
+' 2. IpcReceiverがViewModelを直接呼び出し、データを渡す
+Ipc -> ViewModel: handleIpcMessage(message)
+deactivate Ipc
+activate ViewModel
+
+' 3. ViewModelが内部状態を更新
+ViewModel -> ViewModel: 内部状態を更新 (aiData)
+
+' 4. ViewModelがViewに状態変更を通知 (データバインディング経由)
+ViewModel ->> View: 状態変更を通知
+deactivate ViewModel
+
+' 5. Viewが通知を受け、新しいデータでUIを再描画
+activate View
+View -> View: 新しいデータでUIを再描画
+deactivate View
+
+@enduml

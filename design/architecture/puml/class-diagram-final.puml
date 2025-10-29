@@ -1,0 +1,97 @@
+@startuml
+!theme plain
+
+title クラス図
+
+' ===================================
+' ### Lớp View ###
+' ===================================
+package "View層 (View Layer)" {
+    class AiUI {
+        + build(context: BuildContext)
+    }
+    class CpuUI {
+        + build(context: BuildContext)
+        + handleIncrease()
+        + handleDecrease()
+    }
+    class GpuUI {
+        + build(context: BuildContext)
+        + handleIncrease()
+        + handleDecrease()
+    }
+}
+
+' ===================================
+' ### Lớp ViewModel ###
+' ===================================
+package "ViewModel層 (ViewModel Layer)" {
+    class HomeViewModel {
+        ' --- 内部状態 (Internal State) ---
+        - cpuLoad: double
+        - gpuLoad: double
+        - aiData: AiData
+        
+        ' --- 公開メソッド (Public Methods) ---
+        + updateCpuLoad(load: double)
+        + updateGpuLoad(load: double)
+        + handleIpcMessage(message: String)
+        + getCpuLoad(): double
+        + getGpuLoad(): double
+        + getAiData(): AiData
+    }
+}
+
+' ===================================
+' ### Lớp Model ###
+' ===================================
+package "Model層 (Model Layer)" {
+    class IpcReceiver {
+        ' --- ViewModelへの参照 (Reference to ViewModel) ---
+        - _viewModel: HomeViewModel
+        + startListening()
+        - _onDataReceived(data: String)
+    }
+
+    class CpuLoadGenerator {
+        - _isolate: Isolate
+        + setLoad(percentage: double)
+        + stop()
+    }
+
+    class GpuLoadGenerator {
+        ' Shader-related properties
+        + setLoad(percentage: double)
+        + stop()
+    }
+
+    ' --- データモデル (Data Model) ---
+    class AiData {
+        + objectName: String
+        + confidence: double
+        + position: Rect
+    }
+}
+
+' ===================================
+' ### 関係性 (Relationships) ###
+' ===================================
+
+' --- ViewからViewModelへの依存 (View depends on ViewModel) ---
+CpuUI ..> HomeViewModel
+GpuUI ..> HomeViewModel
+AiUI ..> HomeViewModel
+
+' --- IpcReceiverからViewModelへの更新 (IpcReceiver updates ViewModel) ---
+IpcReceiver --> HomeViewModel : -_viewModel
+
+' --- ViewModelからGeneratorへの制御 (ViewModel controls Generators) ---
+' Association: HomeViewModel giữ tham chiếu tới các Generator
+HomeViewModel --> CpuLoadGenerator
+HomeViewModel --> GpuLoadGenerator
+
+' --- ViewModelはAiDataを所有 (ViewModel owns AiData) ---
+' Composition: AiData là một phần không thể tách rời của HomeViewModel
+HomeViewModel *-- AiData
+
+@enduml

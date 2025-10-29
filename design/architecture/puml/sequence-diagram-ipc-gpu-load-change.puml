@@ -1,0 +1,45 @@
+@startuml
+!theme plain
+
+title シーケンス図: 外部システムによるGPU負荷変更 (v2.8)
+' 標準の非同期矢印 (->>) を使用
+
+actor "外部PC" as ExtPC
+
+box "Main Thread" #LightBlue
+    participant ":IpcReceiver" as Ipc
+    participant ":HomeViewModel" as ViewModel
+    participant ":GpuLoadGenerator" as GpuGen
+    entity "GPU" as GpuResource
+end box
+
+autonumber "<b>[0]"
+
+ExtPC ->> Ipc: IPCメッセージを送信\n(例: "gpu_load: 70")
+activate Ipc
+
+Ipc -> ViewModel: handleGpuLoadMessage(message)
+deactivate Ipc
+activate ViewModel
+
+ViewModel -> GpuGen: setLoad(target)
+activate GpuGen
+
+GpuGen -> GpuResource: 描画タスクを実行
+deactivate GpuGen
+
+' Generatorが結果を非同期に通知
+GpuGen ->> ViewModel: 設定負荷率を通知(applied_percentage)
+activate ViewModel
+
+ViewModel -> ViewModel: 状態を更新
+
+' ViewModelがUIに非同期に通知
+ViewModel ->> View: 状態変更を通知
+deactivate ViewModel
+
+activate View
+View -> View: UIを再描画
+deactivate View
+
+@enduml
